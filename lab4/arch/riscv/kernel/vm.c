@@ -1,11 +1,4 @@
-#include "defs.h"
-#include "mm.h"
-#include "printk.h"
-#include <string.h>
-
-#define VPN2(va) ((va >> 30) & 0x1ff)
-#define VPN1(va) ((va >> 21) & 0x1ff)
-#define VPN0(va) ((va >> 12) & 0x1ff)
+#include "vm.h"
 
 extern char _stext[];
 extern char _srodata[];
@@ -74,6 +67,7 @@ void create_mapping(unsigned long *root_pgtbl, unsigned long va, unsigned long p
 
     while (va < end)
     {
+        
         pgtbl[2] = root_pgtbl;
         vpn[2] = VPN2(va);
         pte[2] = pgtbl[2][vpn[2]];
@@ -82,8 +76,8 @@ void create_mapping(unsigned long *root_pgtbl, unsigned long va, unsigned long p
             pte[2] = ((((unsigned long)new_pg-PA2VA_OFFSET) >> 12) << 10) | 1;
             pgtbl[2][vpn[2]] = pte[2];
         }
-
-        pgtbl[1] = (unsigned long*)((pte[2] >> 10) << 12);
+        
+        pgtbl[1] = (unsigned long*)(((pte[2] >> 10) << 12)+PA2VA_OFFSET);
         vpn[1] = VPN1(va);
         pte[1] = pgtbl[1][vpn[1]];
         if (!(pte[1]&1)) {
@@ -92,9 +86,9 @@ void create_mapping(unsigned long *root_pgtbl, unsigned long va, unsigned long p
             pgtbl[1][vpn[1]] = pte[1];
         }
 
-        pgtbl[0] = (unsigned long*)((pte[1] >> 10) << 12);
+        pgtbl[0] = (unsigned long*)(((pte[1] >> 10) << 12)+PA2VA_OFFSET);
         vpn[0] = VPN0(va);
-        pte[0] = (perm & 15) | ((pa >> 12) << 10);
+        pte[0] = (perm & 31) | ((pa >> 12) << 10);
         pgtbl[0][vpn[0]] = pte[0];
 
         va += PGSIZE;

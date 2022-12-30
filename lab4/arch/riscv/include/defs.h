@@ -19,9 +19,13 @@
 
 #define PA2VA_OFFSET (VM_START - PHY_START)
 
+#define USER_START (0x0000000000000000) // user space start virtual address
+#define USER_END   (0x0000004000000000) // user space end virtual address
+
+
 #define csr_read(csr)                       \
 ({                                          \
-    register uint64 __v;                    \
+    register unsigned long __v;             \
     asm volatile ("csrr " "%0, " #csr       \
                     : "=r" (__v):           \
                     : "memory");            \
@@ -30,7 +34,7 @@
 
 #define csr_write(csr, val)                         \
 ({                                                  \
-    uint64 __v = (uint64)(val);                     \
+    unsigned long __v = (uint64)(val);              \
     asm volatile ("csrw " #csr ", %0"               \
                     : : "r" (__v)                   \
                     : "memory");                    \

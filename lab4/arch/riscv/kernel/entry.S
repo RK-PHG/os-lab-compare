@@ -29,10 +29,20 @@
     LOAD s\n, \reg, \n
 .endm
 
+.macro SWAP_U_S_STACK reg
+    csrr \reg, sscratch
+    csrw sscratch, sp
+    mv sp, \reg
+.endm
+
     .section .text.entry
     .align 2
     .globl _traps 
 _traps:
+    csrr t0, sscratch
+    beq t0, x0, _traps_switch
+    SWAP_U_S_STACK t0
+_traps_switch:
     # save 32 registers and sepc to stack
     addi sp, sp, -33*8
 
@@ -51,11 +61,13 @@ _traps:
 
     # call trap_handler
     csrr a0, scause
-    csrr a1, sepc
+    mv a1, t0
+    mv a2, sp
     call trap_handler
 
     # restore sepc and 32 registers (x2(sp) should be restore last) from stack
     LOAD t0, sp, 32
+    addi t0, t0, 4
     csrw sepc, t0
 
     LOAD x1, sp, 1
@@ -67,6 +79,10 @@ _traps:
 
     LOAD x2, sp, 2
 
+    csrr t0, sscratch
+    beq t0, x0, _traps_end
+    SWAP_U_S_STACK t0
+_traps_end:
     # return from trap
     sret
 
@@ -84,6 +100,16 @@ __switch_to:
         .set n, n+1
     .endr
 
+    addi t0, a0, 152
+    csrr t1, sepc
+    sd t1, 0(t0)
+    csrr t1, sstatus
+    sd t1, 8(t0)
+    csrr t1, sscratch
+    sd t1, 16(t0)
+    csrr t1, satp
+    sd t1, 24(t0)
+
     # restore state from next process
     addi t0, a1, 40
     ld ra, 0(t0)
@@ -96,10 +122,22 @@ __switch_to:
         .set n, n+1
     .endr
 
+    addi t0, a1, 152
+    ld t1, 0(t0)
+    csrw sepc, t1
+    ld t1, 8(t0)
+    csrw sstatus, t1
+    ld t1, 16(t0)
+    csrw sscratch, t1
+    ld t1, 24(t0)
+    csrw satp, t1
+
+    # flush tlb
+    sfence.vma zero, zero
+
     ret
 
     .globl __dummy
 __dummy:
-    la t0, dummy
-    csrw sepc, t0
+    SWAP_STACK t0
     sret

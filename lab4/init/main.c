@@ -3,9 +3,13 @@
 
 extern void test();
 
+extern void schedule();
+
 int start_kernel() {
-    printk("Hello RISC-V\n");
-    printk("idle process is running!\n");
+    printk("[S-MODE] Hello RISC-V\n");
+    // printk("idle process is running!\n");
+
+    schedule();
 
     test();
 

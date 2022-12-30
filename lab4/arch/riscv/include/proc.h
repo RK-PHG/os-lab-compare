@@ -1,6 +1,7 @@
 #include "types.h"
+#include <string.h>
 
-#define NR_TASKS  (1 + 31) // 用于控制 最大线程数量 （idle 线程 + 31 内核线程）
+#define NR_TASKS  (1 + 4) // 只需要创建 4 个用户态进程
 
 #define TASK_RUNNING    0 // 为了简化实验，所有的线程都只有一种状态
 
@@ -12,8 +13,11 @@
 
 #define OFFSET(TYPE , MEMBER) ((unsigned long)(&(((TYPE *)0)->MEMBER)))
 
+extern struct task_struct* current;
+
+typedef unsigned long* pagetable_t;
+
 /* 用于记录 `线程` 的 `内核栈与用户栈指针` */
-/* (lab3中无需考虑，在这里引入是为了之后实验的使用) */
 struct thread_info {
     unsigned long kernel_sp;
     unsigned long user_sp;
@@ -24,6 +28,8 @@ struct thread_struct {
     unsigned long ra;
     unsigned long sp;
     unsigned long s[12];
+
+    unsigned long sepc, sstatus, sscratch;
 };
 
 /* 线程数据结构 */
@@ -35,6 +41,11 @@ struct task_struct {
     unsigned long pid;      // 线程id
 
     struct thread_struct thread;
+
+    unsigned long pgd;
+
+    unsigned long kernel_sp;
+    unsigned long user_sp;
 };
 
 /* 线程初始化 创建 NR_TASKS 个线程 */

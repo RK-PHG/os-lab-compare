@@ -1,11 +1,14 @@
 #include "proc.h"
-#include "mm.h"
 #include "defs.h"
-#include "printk.h"
+#include "mm.h"
 #include "rand.h"
+#include "printk.h"
+#include "vm.h"
 
 extern void __dummy();
 extern void __switch_to(struct task_struct* prev, struct task_struct* next);
+extern char uapp_start[];
+extern char uapp_end[];
 
 struct task_struct* idle;           // idle process
 struct task_struct* current;        // 指向当前运行线程的 `task_struct`
@@ -15,8 +18,10 @@ const unsigned long OffsetOfThreadInTask = (unsigned long)OFFSET(struct task_str
 const unsigned long OffsetOfRaInTask = OffsetOfThreadInTask+(unsigned long)OFFSET(struct thread_struct, ra);
 const unsigned long OffsetOfSpInTask = OffsetOfThreadInTask+(unsigned long)OFFSET(struct thread_struct, sp);
 const unsigned long OffsetOfSInTask = OffsetOfThreadInTask+(unsigned long)OFFSET(struct thread_struct, s);
+const unsigned long OffsetOfSepcInTask = OffsetOfThreadInTask+(unsigned long)OFFSET(struct thread_struct, sepc);
 
 void task_init() {
+    // printk("...proc_init start!\n");
     // 调用 kalloc() 为 idle 分配一个物理页
     idle = (struct task_struct*)kalloc();
 
@@ -45,11 +50,40 @@ void task_init() {
         // 为 task[1] ~ task[NR_TASKS - 1] 设置 `thread_struct` 中的 `ra` 和 `sp`, 其中 `ra` 设置为 __dummy （见 4.3.2）的地址， `sp` 设置为 该线程申请的物理页的高地址
         task[i]->thread.ra = (unsigned long)__dummy;
         task[i]->thread.sp = (unsigned long)(task[i])+PGSIZE;
+
+        // 通过 kalloc 接口申请一个空的页面来作为 U-Mode Stack
+        task[i]->kernel_sp = (unsigned long)(task[i])+PGSIZE;
+        task[i]->user_sp = kalloc();
+
+        pagetable_t pgtbl = (pagetable_t)kalloc();
+        memcpy(pgtbl, swapper_pg_dir, PGSIZE);
+
+        unsigned long va = USER_START;
+        unsigned long pa = (unsigned long)(uapp_start)-PA2VA_OFFSET;
+        create_mapping(pgtbl, va, pa, (unsigned long)(uapp_end)-(unsigned long)(uapp_start), 31);
+
+        va = USER_END-PGSIZE;
+        pa = task[i]->user_sp-PA2VA_OFFSET;
+        create_mapping(pgtbl, va, pa, PGSIZE, 23);
+        
+        unsigned long satp = csr_read(satp);
+        satp = (satp >> 44) << 44;
+        satp |= ((unsigned long)pgtbl-PA2VA_OFFSET) >> 12;
+        task[i]->pgd = satp;
+
+        task[i]->thread.sepc = USER_START;
+        unsigned long sstatus = csr_read(sstatus);
+        sstatus &= ~(1<<8); // set sstatus[SPP] = 0
+        sstatus |= 1<<5; // set sstatus[SPIE] = 1
+        sstatus |= 1<<18; // set sstatus[SUM] = 1
+        task[i]->thread.sstatus = sstatus;
+        task[i]->thread.sscratch = USER_END;
     }
 
     // printk("OffsetOfRaInTask = %d\n", OffsetOfRaInTask);
     // printk("OffsetOfSpInTask = %d\n", OffsetOfSpInTask);
     // printk("OffsetOfSInTask = %d\n", OffsetOfSInTask);
+    // printk("OffsetOfSepcInTask = %d\n", OffsetOfSepcInTask);
     printk("...proc_init done!\n");
 }
 
@@ -114,7 +148,7 @@ void SJF_schedule() {
     struct task_struct* next = current;
     unsigned long min_counter = COUNTER_MAX+1;
     while (1) {
-        for (int i = 1; i < NR_TASKS; i++) {
+        for (int i = NR_TASKS; i > 0; i--) {
             if (task[i]->counter == 0) continue;
             if (task[i]->counter < min_counter) {
                 min_counter = task[i]->counter;
@@ -127,6 +161,7 @@ void SJF_schedule() {
                 task[i]->counter = rand()%(COUNTER_MAX-COUNTER_MIN+1)+COUNTER_MIN;
                 // printk("SET [PID = %d COUNTER = %d]\n", task[i]->pid, task[i]->counter);
             }
+            printk("\n");
         }
         else break;
     }

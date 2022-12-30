@@ -20,6 +20,8 @@ _start:
 
     call setup_vm_final
 
+    call task_init
+
     # set stvec = _traps
     la t0, _traps
     csrw stvec, t0
@@ -35,9 +37,7 @@ _start:
     call sbi_set_timer
 
     # set sstatus[SIE] = 1
-    csrsi sstatus, 1<<1  # SIE 在 sstatus 的第一比特位
-    
-    call task_init
+    # csrsi sstatus, 1<<1  # SIE 在 sstatus 的第一比特位
 
     call start_kernel # 跳转至 main.c 中的 start_kernel 函数
 
